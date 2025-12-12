@@ -177,111 +177,143 @@ const WebsiteDesign = ({ generatedCode, onCodeUpdate, isBuilding }) => {
     }
 
     const iframe = iframeRef.current
-    let eventListenersAdded = false
+    const handlersRef = { mouseover: null, mouseout: null, click: null, keydown: null, blur: null }
     
     const setupEditor = () => {
-      if (eventListenersAdded) return // Prevent duplicate listeners
-      
-      const doc = iframe.contentDocument
-      if (!doc || !doc.body) return
-
-      const handleMouseOver = (e) => {
-        if (selectedElRef.current) return
-        
-        const target = e.target
-        if (!target || target === doc.body) return
-
-        if (hoverElRef.current && hoverElRef.current !== target) {
-          hoverElRef.current.style.outline = ""
-        }
-        
-        hoverElRef.current = target
-        hoverElRef.current.style.outline = "2px dashed #3b82f6"
-        hoverElRef.current.style.outlineOffset = "2px"
-      }
-
-      const handleMouseOut = (e) => {
-        if (selectedElRef.current) return
-        
-        if (hoverElRef.current) {
-          hoverElRef.current.style.outline = ""
-          hoverElRef.current = null
-        }
-      }
-
-      const handleClick = (e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        
-        const target = e.target
-        if (!target || target === doc.body) return
-
-        if (selectedElRef.current && selectedElRef.current !== target) {
-          selectedElRef.current.style.outline = ""
-          selectedElRef.current.removeAttribute("contenteditable")
+      try {
+        const doc = iframe.contentDocument || iframe.contentWindow?.document
+        if (!doc || !doc.body) {
+          console.warn('❌ Cannot access iframe document')
+          return
         }
 
-        selectedElRef.current = target
-        selectedElRef.current.style.outline = "2px solid #ef4444"
-        selectedElRef.current.style.outlineOffset = "2px"
+        // Remove existing listeners first
+        if (handlersRef.mouseover) {
+          doc.body?.removeEventListener("mouseover", handlersRef.mouseover)
+          doc.body?.removeEventListener("mouseout", handlersRef.mouseout)
+          doc.body?.removeEventListener("click", handlersRef.click)
+          doc?.removeEventListener("keydown", handlersRef.keydown)
+          doc.body?.removeEventListener("blur", handlersRef.blur, true)
+        }
+
+        const handleMouseOver = (e) => {
+          if (selectedElRef.current) return
+          
+          const target = e.target
+          if (!target || target === doc.body || target === doc.documentElement) return
+
+          if (hoverElRef.current && hoverElRef.current !== target) {
+            hoverElRef.current.style.outline = ""
+          }
+          
+          hoverElRef.current = target
+          target.style.outline = "2px dashed #3b82f6"
+          target.style.outlineOffset = "2px"
+        }
+
+        const handleMouseOut = (e) => {
+          if (selectedElRef.current) return
+          
+          if (hoverElRef.current && hoverElRef.current !== e.target) {
+            hoverElRef.current.style.outline = ""
+            hoverElRef.current = null
+          }
+        }
+
+        const handleClick = (e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          
+          const target = e.target
+          if (!target || target === doc.body || target === doc.documentElement) return
+
+          if (selectedElRef.current && selectedElRef.current !== target) {
+            selectedElRef.current.style.outline = ""
+            selectedElRef.current.removeAttribute("contenteditable")
+          }
+
+          selectedElRef.current = target
+          target.style.outline = "2px solid #ef4444"
+          target.style.outlineOffset = "2px"
+          
+          const isImage = target.tagName.toLowerCase() === 'img'
+          setIsImageElement(isImage)
+          
+          if (!isImage) {
+            target.setAttribute("contenteditable", "true")
+            target.focus()
+          }
+
+          setSelectedElement(target)
+          console.log("✅ Selected element:", target.tagName, isImage ? '(Image)' : '')
+        }
+
+        const handleKeyDown = (e) => {
+          if (e.key === "Escape" && selectedElRef.current) {
+            clearSelection()
+          }
+        }
+
+        const handleBlur = (e) => {
+          if (selectedElRef.current) {
+            console.log("✏️ Element edited")
+          }
+        }
+
+        // Store handler references
+        handlersRef.mouseover = handleMouseOver
+        handlersRef.mouseout = handleMouseOut
+        handlersRef.click = handleClick
+        handlersRef.keydown = handleKeyDown
+        handlersRef.blur = handleBlur
+
+        // Add event listeners
+        doc.body.addEventListener("mouseover", handleMouseOver, true)
+        doc.body.addEventListener("mouseout", handleMouseOut, true)
+        doc.body.addEventListener("click", handleClick, true)
+        doc.addEventListener("keydown", handleKeyDown, true)
+        doc.body.addEventListener("blur", handleBlur, true)
         
-        const isImage = target.tagName.toLowerCase() === 'img'
-        setIsImageElement(isImage)
-        
-        if (!isImage) {
-          selectedElRef.current.setAttribute("contenteditable", "true")
-          selectedElRef.current.focus()
-        }
-
-        setSelectedElement(target)
-        console.log("✅ Selected element:", selectedElRef.current.tagName, isImage ? '(Image)' : '')
-      }
-
-      const handleBlur = (e) => {
-        if (selectedElRef.current) {
-          console.log("✏️ Element edited")
-        }
-      }
-
-      const handleKeyDown = (e) => {
-        if (e.key === "Escape" && selectedElRef.current) {
-          clearSelection()
-        }
-      }
-
-      doc.body.addEventListener("mouseover", handleMouseOver)
-      doc.body.addEventListener("mouseout", handleMouseOut)
-      doc.body.addEventListener("click", handleClick)
-      doc.addEventListener("keydown", handleKeyDown)
-      doc.body.addEventListener("blur", handleBlur, true)
-      
-      eventListenersAdded = true
-
-      return () => {
-        doc.body?.removeEventListener("mouseover", handleMouseOver)
-        doc.body?.removeEventListener("mouseout", handleMouseOut)
-        doc.body?.removeEventListener("click", handleClick)
-        doc?.removeEventListener("keydown", handleKeyDown)
-        doc.body?.removeEventListener("blur", handleBlur, true)
+        console.log('✅ Edit mode event listeners attached successfully')
+      } catch (error) {
+        console.warn('⚠️ Error setting up editor:', error)
       }
     }
 
     const checkIframeReady = () => {
-      if (iframe.contentDocument && iframe.contentDocument.readyState === 'complete') {
-        return setupEditor()
+      try {
+        if (iframe.contentDocument?.readyState === 'complete' || iframe.contentDocument?.readyState === 'interactive') {
+          setupEditor()
+        }
+      } catch (error) {
+        console.warn('⚠️ Error checking iframe ready:', error)
       }
     }
 
+    // Try to setup immediately
+    setTimeout(() => checkIframeReady(), 100)
+    
+    // Also listen for load event
     iframe.addEventListener('load', checkIframeReady)
-    const cleanup = checkIframeReady()
 
     return () => {
-      iframe.removeEventListener('load', checkIframeReady)
-      if (cleanup) cleanup()
+      iframe?.removeEventListener('load', checkIframeReady)
+      
+      try {
+        const doc = iframe.contentDocument || iframe.contentWindow?.document
+        if (doc && handlersRef.mouseover) {
+          doc.body?.removeEventListener("mouseover", handlersRef.mouseover, true)
+          doc.body?.removeEventListener("mouseout", handlersRef.mouseout, true)
+          doc.body?.removeEventListener("click", handlersRef.click, true)
+          doc?.removeEventListener("keydown", handlersRef.keydown, true)
+          doc.body?.removeEventListener("blur", handlersRef.blur, true)
+        }
+      } catch (error) {
+        console.warn('⚠️ Error removing listeners:', error)
+      }
       
       selectedElRef.current = null
       hoverElRef.current = null
-      eventListenersAdded = false
     }
   }, [editMode])
 
