@@ -5,29 +5,51 @@ import { and, eq } from 'drizzle-orm';
 
 
 export async function GET(req){
-    const {searchParams} = new URL(req.url);
-    const frameId = searchParams.get('frameId')
-    const projectId = searchParams.get('projectId')
+    try {
+        const {searchParams} = new URL(req.url);
+        const frameId = searchParams.get('frameId')
+        const projectId = searchParams.get('projectId')
 
-    const frameResult = await db.select().from(frameTable).where(eq(frameTable.frameId, frameId))
+        if (!frameId || !projectId) {
+            return NextResponse.json({ error: 'Missing frameId or projectId' }, { status: 400 })
+        }
 
-    const chatResult = await db.select().from(chatTable).where(eq(chatTable.frameId, frameId))
+        const frameResult = await db.select().from(frameTable).where(eq(frameTable.frameId, frameId))
 
-    const finalResult = {
-        ...frameResult[0],
-        chatMessages:chatResult[0].chatMessage
+        if (!frameResult || frameResult.length === 0) {
+            return NextResponse.json({ error: 'Frame not found' }, { status: 404 })
+        }
+
+        const chatResult = await db.select().from(chatTable).where(eq(chatTable.frameId, frameId))
+
+        const finalResult = {
+            ...frameResult[0],
+            chatMessages: chatResult.length > 0 ? chatResult[0].chatMessage : []
+        }
+
+        return NextResponse.json(finalResult)
+    } catch (error) {
+        console.error('❌ Error in GET /api/frames:', error)
+        return NextResponse.json({ error: 'Failed to fetch frame details', details: error.message }, { status: 500 })
     }
-
-    return NextResponse.json(finalResult)
 }
 
 
 export async function PUT(req){
-    const {designCode, frameId, projectId} = await req.json();
+    try {
+        const {designCode, frameId, projectId} = await req.json();
 
-    const result = await db.update(frameTable).set({
-        designCode: designCode
-    }).where(and(eq(frameTable.frameId, frameId),eq(frameTable.projectId, projectId)));
+        if (!designCode || !frameId || !projectId) {
+            return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+        }
 
-    return NextResponse.json({result: 'success'})
+        const result = await db.update(frameTable).set({
+            designCode: designCode
+        }).where(and(eq(frameTable.frameId, frameId), eq(frameTable.projectId, projectId)));
+
+        return NextResponse.json({result: 'success', updated: result})
+    } catch (error) {
+        console.error('❌ Error in PUT /api/frames:', error)
+        return NextResponse.json({ error: 'Failed to save frame', details: error.message }, { status: 500 })
+    }
 }
