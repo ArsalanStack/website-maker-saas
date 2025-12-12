@@ -80,7 +80,7 @@ export function AppSidebar() {
         "
       >
         <h2 className="line-clamp-1">
-          {project?.chats[0].chatMessage[0].content}
+          {project?.chats[0]?.chatMessage[0]?.content}
         </h2>
       </Link>
     ))
